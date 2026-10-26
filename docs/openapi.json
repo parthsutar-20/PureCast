@@ -1,0 +1,9 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "PureCast API",
+    "description": "Filter-health forecasting platform for water purifiers. Provides real-time health monitoring, remaining-life forecasts, and fault diagnosis for RO/UV water purification systems.",
+    "version": "0.1.0"
+  },
+  "paths": {}
+}

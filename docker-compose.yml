@@ -1,0 +1,95 @@
+# ── docker-compose.yml ── Dev profile ─────────────────────
+# Usage: docker compose up -d
+# ──────────────────────────────────────────────────────────
+
+services:
+  # ── PostgreSQL + TimescaleDB ────────────────────────────
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: purecast-postgres
+    environment:
+      POSTGRES_USER: purecast
+      POSTGRES_PASSWORD: purecast_dev
+      POSTGRES_DB: purecast
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/timescale-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U purecast"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ───────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: purecast-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  # ── Mosquitto MQTT Broker ──────────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: purecast-mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./docker/mosquitto/acl.conf:/mosquitto/config/acl.conf
+      - ./docker/mosquitto/passwd:/mosquitto/config/passwd
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -t '$$SYS/#' -C 1 -W 3 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ── Prometheus ──────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: purecast-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+
+  # ── Grafana ─────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: purecast-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: purecast_dev
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  redis_data:
+  mosquitto_data:
+  mosquitto_log:
+  prometheus_data:
+  grafana_data:

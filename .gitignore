@@ -1,0 +1,66 @@
+# Byte-compiled / optimised / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Type checking
+.mypy_cache/
+
+# Linting
+.ruff_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Models (large files)
+models/*.bin
+models/*.pkl
+models/*.joblib
+
+# Data
+*.csv
+*.parquet
+!tests/golden/*.csv
+
+# Docker volumes
+docker/volumes/
+
+# Secrets
+*.pem
+*.key
+!docker/mosquitto/*.conf

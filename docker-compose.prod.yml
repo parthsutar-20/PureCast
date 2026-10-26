@@ -1,0 +1,90 @@
+# ── docker-compose.prod.yml ── Production overrides ──────
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# ──────────────────────────────────────────────────────────
+
+services:
+  # ── API Server ──────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: purecast-api
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      DATABASE_URL: postgresql+asyncpg://purecast:${DB_PASSWORD}@postgres:5432/purecast
+      REDIS_URL: redis://redis:6379/0
+      MQTT_BROKER_HOST: mosquitto
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+
+  # ── MQTT Ingestor ──────────────────────────────────────
+  ingestor:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ingestor
+    container_name: purecast-ingestor
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://purecast:${DB_PASSWORD}@postgres:5432/purecast
+      REDIS_URL: redis://redis:6379/0
+      MQTT_BROKER_HOST: mosquitto
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
+  # ── ARQ Worker ─────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    container_name: purecast-worker
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://purecast:${DB_PASSWORD}@postgres:5432/purecast
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "2.0"
+
+  # ── Production overrides for infra services ────────────
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    restart: unless-stopped
+
+  redis:
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}
+    restart: unless-stopped
+
+  mosquitto:
+    restart: unless-stopped

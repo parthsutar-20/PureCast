@@ -1,0 +1,51 @@
+# ── PureCast API Server ──────────────────────────────────
+# Multi-stage build for minimal production image
+# ─────────────────────────────────────────────────────────
+
+# Stage 1: Build
+FROM python:3.12-slim AS builder
+
+WORKDIR /app
+
+# Install uv for fast dependency resolution
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Copy dependency files first for layer caching
+COPY pyproject.toml uv.lock* ./
+
+# Install production dependencies only
+RUN uv sync --no-dev --frozen
+
+# Copy source code
+COPY src/ src/
+COPY migrations/ migrations/
+COPY alembic.ini ./
+
+# Stage 2: Runtime
+FROM python:3.12-slim AS runtime
+
+# Security: run as non-root
+RUN groupadd -r purecast && useradd -r -g purecast purecast
+
+WORKDIR /app
+
+# Copy virtual environment and app from builder
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/src /app/src
+COPY --from=builder /app/migrations /app/migrations
+COPY --from=builder /app/alembic.ini /app/alembic.ini
+
+# Ensure the venv is on PATH
+ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONPATH="/app/src"
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+USER purecast
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import httpx; r = httpx.get('http://localhost:8000/health'); r.raise_for_status()"
+
+CMD ["uvicorn", "purecast.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

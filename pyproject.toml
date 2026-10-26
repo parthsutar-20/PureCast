@@ -1,0 +1,222 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "purecast"
+version = "0.1.0"
+description = "Filter-health forecasting platform for water purifiers"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+authors = [{ name = "PureCast Team" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: FastAPI",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+
+dependencies = [
+    # Web framework
+    "fastapi>=0.115.0,<1.0",
+    "uvicorn[standard]>=0.32.0,<1.0",
+    "python-multipart>=0.0.12",
+    # Data validation
+    "pydantic[email]>=2.9.0,<3.0",
+    "pydantic-settings>=2.6.0,<3.0",
+    # Database
+    "sqlalchemy[asyncio]>=2.0.36,<3.0",
+    "asyncpg>=0.30.0,<1.0",
+    "alembic>=1.14.0,<2.0",
+    # Cache & queue
+    "redis[hiredis]>=5.2.0,<6.0",
+    "arq>=0.26.0,<1.0",
+    # MQTT
+    "aiomqtt>=2.3.0,<3.0",
+    # Auth
+    "PyJWT[crypto]>=2.9.0,<3.0",
+    "argon2-cffi>=23.1.0,<24.0",
+    # HTTP client
+    "httpx>=0.28.0,<1.0",
+    # Observability
+    "structlog>=24.4.0,<25.0",
+    "opentelemetry-api>=1.28.0,<2.0",
+    "opentelemetry-sdk>=1.28.0,<2.0",
+    "opentelemetry-instrumentation-fastapi>=0.49b0",
+    "opentelemetry-exporter-otlp>=1.28.0,<2.0",
+    "prometheus-client>=0.21.0,<1.0",
+    # ML & numerics
+    "lightgbm>=4.5.0,<5.0",
+    "numpy>=2.1.0,<3.0",
+    "scipy>=1.14.0,<2.0",
+    "pandas>=2.2.0,<3.0",
+    # Utilities
+    "tenacity>=9.0.0,<10.0",
+    "orjson>=3.10.0,<4.0",
+    "websockets>=13.0,<14.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=8.3.0,<9.0",
+    "pytest-asyncio>=0.24.0,<1.0",
+    "pytest-cov>=6.0.0,<7.0",
+    "pytest-xdist>=3.5.0,<4.0",
+    "hypothesis>=6.115.0,<7.0",
+    "testcontainers[postgres,redis]>=4.8.0,<5.0",
+    "factory-boy>=3.3.0,<4.0",
+    "freezegun>=1.4.0,<2.0",
+    "respx>=0.22.0,<1.0",
+    # Linting & formatting
+    "ruff>=0.7.0,<1.0",
+    "mypy>=1.13.0,<2.0",
+    # Security
+    "bandit>=1.8.0,<2.0",
+    "pip-audit>=2.7.0,<3.0",
+    # Load testing
+    "locust>=2.32.0,<3.0",
+    # Pre-commit
+    "pre-commit>=4.0.0,<5.0",
+    # Type stubs
+    "types-redis>=4.6.0",
+    "sqlalchemy[mypy]>=2.0.36,<3.0",
+]
+
+[project.scripts]
+purecast-api = "purecast.main:run"
+purecast-ingestor = "purecast.infrastructure.mqtt.ingestor:run"
+purecast-worker = "purecast.workers.main:run"
+purecast-simulator = "purecast.simulator.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/purecast"]
+
+# ── Ruff ──────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "ANN",   # flake8-annotations
+    "ASYNC", # flake8-async
+    "B",     # flake8-bugbear
+    "A",     # flake8-builtins
+    "C4",    # flake8-comprehensions
+    "DTZ",   # flake8-datetimez
+    "T10",   # flake8-debugger
+    "ICN",   # flake8-import-conventions
+    "PIE",   # flake8-pie
+    "PT",    # flake8-pytest-style
+    "RSE",   # flake8-raise
+    "RET",   # flake8-return
+    "SLF",   # flake8-self
+    "SIM",   # flake8-simplify
+    "TID",   # flake8-tidy-imports
+    "TCH",   # flake8-type-checking
+    "ARG",   # flake8-unused-arguments
+    "PTH",   # flake8-use-pathlib
+    "ERA",   # eradicate
+    "PL",    # pylint
+    "TRY",   # tryceratops
+    "FLY",   # flynt
+    "PERF",  # perflint
+    "RUF",   # ruff-specific
+]
+ignore = [
+    "ANN401",  # dynamically typed expressions (Any)
+    "TRY003",  # long exception messages
+    "PLR0913", # too many arguments (domain objects can be complex)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["ANN", "ARG", "PLR2004", "SLF001"]
+"migrations/**/*.py" = ["ANN", "ERA001"]
+"scripts/**/*.py" = ["ANN", "ARG", "PLR2004", "SLF001", "E501", "T201", "PTH"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["purecast"]
+
+# ── Mypy ──────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+    "lightgbm.*",
+    "aiomqtt.*",
+    "arq.*",
+    "testcontainers.*",
+    "locust.*",
+]
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+# ── Pytest ────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+markers = [
+    "unit: Unit tests (no external deps)",
+    "integration: Integration tests (need containers)",
+    "e2e: End-to-end tests (full stack)",
+    "property: Property-based tests (hypothesis)",
+    "load: Load/performance tests (locust)",
+    "slow: Tests that take >5s",
+]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:passlib.*",
+]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+
+# ── Coverage ──────────────────────────────────────────────
+[tool.coverage.run]
+source = ["src/purecast"]
+branch = true
+omit = [
+    "*/migrations/*",
+    "*/simulator/*",
+]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.",
+    "@overload",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]
+
+# ── Bandit ────────────────────────────────────────────────
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101"]  # assert used in tests

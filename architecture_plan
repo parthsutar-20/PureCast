@@ -1,0 +1,163 @@
+# PureCast Backend — Phase 0 Architecture Plan
+
+## 1. High-Level Architecture
+
+```mermaid
+graph TB
+    subgraph Edge["Edge Layer (ESP32-C3)"]
+        S[Sensors] --> E[Edge Firmware]
+    end
+
+    subgraph Ingestion["Ingestion Layer"]
+        E -->|MQTT/TLS| MB[Mosquitto Broker]
+        E -->|HTTP fallback| API
+        MB --> IW[MQTT Ingestor Worker]
+    end
+
+    subgraph App["Application Layer"]
+        API[FastAPI API Server]
+        IW --> Q[ARQ Task Queue]
+        API --> Q
+        Q --> W[Workers]
+    end
+
+    subgraph Domain["Domain Layer (Pure Python)"]
+        SP[Signal Processing] --> HI[Health Index]
+        HI --> KF[Kalman Forecaster]
+        KF --> DX[Diagnosis Engine]
+        LM[Load Models] --> HI
+        ML[ML Predictor] --> KF
+    end
+
+    subgraph Infra["Infrastructure Layer"]
+        PG[(PostgreSQL + TimescaleDB)]
+        RD[(Redis)]
+        S3[Model Registry / S3]
+    end
+
+    subgraph Observe["Observability"]
+        OT[OpenTelemetry]
+        PR[Prometheus]
+        GR[Grafana]
+        SL[structlog]
+    end
+
+    API --> Domain
+    W --> Domain
+    Domain --> PG
+    Domain --> RD
+    API --> PG
+    API --> RD
+    W --> PG
+    API --> OT
+    W --> OT
+    OT --> PR
+    PR --> GR
+```
+
+## 2. Key Architecture Decisions
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| **Task queue** | **ARQ** (not Celery) | Async-native (matches FastAPI), lighter footprint, Redis-backed (already in stack), simpler config. Celery's multi-broker support is unnecessary here. |
+| **Hexagonal architecture** | Domain layer has zero framework imports | Testable in isolation, portable, enforced by linting rules |
+| **Auth** | OAuth2 password flow + JWT (access 15m / refresh 7d) + Argon2id | Standard, stateless verification, refresh rotation with revocation list in Redis |
+| **Multi-tenancy** | Shared DB, `tenant_id` on every row, PostgreSQL RLS policies | Cost-efficient, strong isolation, tested with dedicated suite |
+| **Telemetry storage** | TimescaleDB hypertable partitioned by `device_id` + time | Purpose-built for time-series, continuous aggregates for rollups, compression + retention policies |
+| **ML model registry** | File-based with DB metadata (ModelVersion table) | Simple, no external dependency; S3-compatible interface for production upgrade |
+| **Config** | pydantic-settings, 12-factor, `.env` files per environment | Type-safe, validated at startup |
+| **Package manager** | **uv** | Fastest resolver, lockfile support, drop-in pip replacement |
+
+## 3. Data Flow
+
+```mermaid
+sequenceDiagram
+    participant ESP as ESP32-C3
+    participant MQTT as Mosquitto
+    participant ING as Ingestor
+    participant DB as TimescaleDB
+    participant Q as ARQ Queue
+    participant W as Worker
+    participant API as FastAPI
+    participant WS as WebSocket
+
+    ESP->>MQTT: Publish telemetry (HMAC-signed)
+    MQTT->>ING: Forward message
+    ING->>ING: Validate signature, schema, dedup
+    ING->>DB: Batch insert raw readings
+    ING->>Q: Enqueue process_telemetry
+    Q->>W: Dequeue
+    W->>W: Signal processing (median, sanity, temp correction)
+    W->>W: Health index computation
+    W->>W: Kalman forecast update
+    W->>W: Diagnosis rule engine
+    W->>DB: Store HealthSnapshot, Forecast, Diagnosis
+    W->>WS: Push live update
+    W->>Q: Enqueue alert (if threshold crossed)
+    API->>DB: Query forecasts, diagnoses
+    API->>WS: Stream to dashboard
+```
+
+## 4. Domain Model (Entity Relationships)
+
+```mermaid
+erDiagram
+    Tenant ||--o{ User : has
+    Tenant ||--o{ Household : has
+    Tenant ||--o{ Subscription : has
+    Household ||--o{ Device : has
+    Device ||--o{ Cartridge : has
+    Device ||--o{ TelemetryReading : generates
+    Device ||--o{ HealthSnapshot : has
+    Device ||--o{ Event : has
+    Cartridge ||--o{ Forecast : has
+    Cartridge ||--o{ Diagnosis : has
+    Device ||--o{ Alert : triggers
+    Alert ||--o| Order : triggers
+    Alert ||--o| ServiceRequest : triggers
+    ServiceRequest ||--o| Technician : assigned_to
+    Tenant ||--o{ ModelVersion : owns
+    Tenant ||--o{ UsageRecord : metered
+    Tenant ||--o{ AuditLog : tracks
+```
+
+## 5. Security Architecture
+
+- **Transport**: TLS everywhere (MQTT over TLS, HTTPS)
+- **Device auth**: Per-device MQTT credentials (username/password) generated at provisioning
+- **Payload integrity**: HMAC-SHA256 on telemetry payloads, nonce + timestamp for replay protection (5-minute window)
+- **API auth**: JWT with RS256, access token (15 min), refresh token (7 days) with rotation
+- **Password storage**: Argon2id with recommended parameters
+- **RBAC roles**: SUPER_ADMIN, TENANT_ADMIN, TECHNICIAN, HOUSEHOLD_USER, API_KEY (machine)
+- **Tenant isolation**: PostgreSQL RLS + application-level checks + integration tests
+- **Rate limiting**: Redis-based token bucket per tenant/user
+- **Input validation**: Pydantic v2 on every boundary
+- **Safety constraint**: No control commands ever sent to purifiers. System is advisory only.
+
+## 6. Folder Structure
+
+Exactly as specified in the requirements. Key principle: `src/purecast/domain/` contains **zero** imports from FastAPI, SQLAlchemy, or any infrastructure package. This is enforced by an import linter rule.
+
+## 7. Phase Plan
+
+| Phase | Scope | Key Deliverables |
+|---|---|---|
+| **0** (this) | Scaffold + tooling | Repo structure, pyproject.toml, Docker, CI, docs skeleton |
+| **1** | Core + DB + Auth | Config, logging, DB models, migrations, TimescaleDB, auth, RBAC, tenants |
+| **2** | Domain algorithms | Signal processing, health index, Kalman, diagnosis — with full tests |
+| **3** | Ingestion pipeline | MQTT ingestor, telemetry API, ARQ workers, forecast recompute |
+| **4** | ML pipeline | LightGBM trainer, model registry, prediction service, fallback |
+| **5** | Product APIs | Devices, forecasts, alerts, commerce, WebSocket |
+| **6** | Business layer | Plans, metering, billing, analytics, ROI |
+| **7** | Simulator + evaluation | Physics simulator, demo scenarios, evaluation harness |
+| **8** | Polish | Observability dashboards, security hardening, load tests, `make demo` |
+
+## 8. Performance Targets
+
+- **Ingestion**: 10,000 devices × 1 msg/min = ~167 msg/s sustained
+- **Strategy**: Batch inserts (100-row chunks), async I/O throughout, TimescaleDB chunk compression
+- **Forecast recompute**: Incremental (per new telemetry batch), not full recalc
+- **API latency**: P95 < 200ms for forecast queries (Redis-cached)
+
+> [!IMPORTANT]
+> This plan is ready for review. Say **"continue"** to proceed to Phase 1.

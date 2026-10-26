@@ -1,0 +1,89 @@
+{
+  "__inputs": [],
+  "annotations": { "list": [] },
+  "description": "PureCast fleet overview — device health, ingestion rates, forecast accuracy",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Active Devices",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "purecast_active_devices_total",
+          "legendFormat": "devices"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 1000 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Telemetry Ingestion Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(purecast_telemetry_messages_total[5m])",
+          "legendFormat": "msg/s"
+        }
+      ]
+    },
+    {
+      "title": "Forecast Recompute Latency (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.95, rate(purecast_forecast_recompute_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "title": "API Request Latency (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.95, rate(purecast_http_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "{{ method }} {{ path }}"
+        }
+      ]
+    },
+    {
+      "title": "Health Index Distribution",
+      "type": "histogram",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "purecast_health_index_current",
+          "legendFormat": "{{ consumable_type }}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["purecast"],
+  "templating": { "list": [] },
+  "time": { "from": "now-24h", "to": "now" },
+  "title": "PureCast Fleet Overview",
+  "uid": "purecast-fleet-overview"
+}
